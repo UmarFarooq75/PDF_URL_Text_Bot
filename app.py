@@ -1,6 +1,6 @@
 import os
 import streamlit as st
-# from dotenv import load_dotenv
+from dotenv import load_dotenv
 from PyPDF2 import PdfReader
 from langchain.chains import ConversationalRetrievalChain
 from langchain.text_splitter import CharacterTextSplitter, RecursiveCharacterTextSplitter
@@ -11,7 +11,7 @@ from langchain.embeddings import HuggingFaceEmbeddings
 from htmlTemplates import css, bot_template, user_template
 from langchain.llms import GooglePalm
 
-# load_dotenv()  # Take environment variables from .env (especially openai API key)
+load_dotenv()  # Take environment variables from .env (especially openai API key)
 
 # Define functions for processing PDFs
 def get_pdf_text(pdf_docs):
@@ -68,7 +68,7 @@ def handle_userinput(user_question):
 
 # Main function to run the Streamlit app
 def main():
-    # load_dotenv()
+    load_dotenv()
     st.set_page_config(page_title="Chat with PDFs and URLs", page_icon=":books:")
     st.write(css, unsafe_allow_html=True)
 
