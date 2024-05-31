@@ -1,26 +1,42 @@
 import os
 import streamlit as st
 from dotenv import load_dotenv
-from PyPDF2 import PdfReader
+from PyPDF2 import PdfReader  # Import PdfReadError
 from langchain.chains import ConversationalRetrievalChain
-from langchain.text_splitter import CharacterTextSplitter, RecursiveCharacterTextSplitter
-from langchain.vectorstores import FAISS
 from langchain.memory import ConversationBufferMemory
-from langchain.document_loaders import UnstructuredURLLoader
-from langchain.embeddings import HuggingFaceEmbeddings
-from htmlTemplates import css, bot_template, user_template
 from langchain.llms import GooglePalm
+from langchain.embeddings import HuggingFaceEmbeddings
+from langchain.vectorstores import FAISS
+from langchain.prompts.few_shot import FewShotPromptTemplate
+from langchain.prompts.prompt import PromptTemplate
+from langchain_core.example_selectors import SemanticSimilarityExampleSelector
+from langchain.document_loaders import UnstructuredURLLoader
+from langchain.text_splitter import CharacterTextSplitter, RecursiveCharacterTextSplitter
+from htmlTemplates import css, bot_template, user_template
 
 load_dotenv()  # Take environment variables from .env (especially openai API key)
 
 # Define functions for processing PDFs
 def get_pdf_text(pdf_docs):
     text = ""
+
     for pdf in pdf_docs:
-        pdf_reader = PdfReader(pdf)
-        for page in pdf_reader.pages:
-            text += page.extract_text()
+        # Check if the file is not a PDF
+        if pdf.type != 'application/pdf':
+            st.error("Error: The uploaded file is not a PDF.")
+            return ""
+
+        try:
+            pdf_reader = PdfReader(pdf)
+            for page in pdf_reader.pages:
+                text += page.extract_text()
+        except TypeError as e:
+            st.error(f"Error reading PDF file: {e}")
+            st.error("Please ensure that the PDF file is not corrupted and try again.")
+            return ""  # Return empty string to indicate failure
+    
     return text
+
 
 def get_text_chunks(text, chunk_size=1000, chunk_overlap=200):
     text_splitter = CharacterTextSplitter(
@@ -40,11 +56,15 @@ def process_urls(urls):
     docs = text_splitter.split_documents(data)
     return docs
 
-# Create vector store from text chunks
 def get_vectorstore_from_chunks(text_chunks):
     embeddings = HuggingFaceEmbeddings(model_name='sentence-transformers/all-MiniLM-L6-v2')
+    # combined_texts = [
+    #     chunk + "\n" + " ".join(str(value) for value in example.values())
+    #     for chunk, example in zip(text_chunks, examples)
+    # ]
     vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
     return vectorstore
+
 
 # Create conversation chain
 def get_conversation_chain(vectorstore):
@@ -69,6 +89,7 @@ def handle_userinput(user_question):
             st.write(user_template.replace("{{MSG}}", message.content), unsafe_allow_html=True)
         else:
             st.write(bot_template.replace("{{MSG}}", message.content), unsafe_allow_html=True)
+
 
 # Main function to run the Streamlit app
 def main():
@@ -107,18 +128,24 @@ def main():
             with st.spinner("Processing PDFs and URLs"):
                 if pdf_docs:
                     raw_text = get_pdf_text(pdf_docs)
-                    text_chunks += get_text_chunks(raw_text)
+                    if raw_text:
+                        text_chunks += get_text_chunks(raw_text)
+                    else:
+                        st.error("Failed to extract text from PDFs.")
                 
                 if any(url_inputs):
                     url_docs = process_urls([url for url in url_inputs if url])
-                    for doc in url_docs:
-                        text_chunks += get_text_chunks(doc.page_content)
+                    if url_docs:
+                        for doc in url_docs:
+                            text_chunks += get_text_chunks(doc.page_content)
+                    else:
+                        st.error("Failed to fetch data from URLs.")
                 
                 if text_chunks:
                     vectorstore = get_vectorstore_from_chunks(text_chunks)
                     st.session_state.conversation = get_conversation_chain(vectorstore)
                 else:
-                    st.error("No valid PDFs or URLs provided.")
+                    st.error("No valid PDFs or URLs provided or processed.")
 
 if __name__ == '__main__':
     main()
