@@ -68,7 +68,7 @@ def get_vectorstore_from_chunks(text_chunks):
 
 # Create conversation chain
 def get_conversation_chain(vectorstore):
-    llm = GooglePalm(google_api_key=os.environ["GOOGLE_API_KEY"], temperature=0.1)
+    llm = GooglePalm(google_api_key=st.secrets["GOOGLE_API_KEY"], temperature=0.1)
     memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True)
     conversation_chain = ConversationalRetrievalChain.from_llm(
         llm=llm,
