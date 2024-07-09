@@ -1,31 +1,26 @@
 import os
 import streamlit as st
 from dotenv import load_dotenv
-from PyPDF2 import PdfReader  # Import PdfReadError
+from PyPDF2 import PdfReader
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from langchain.llms import GooglePalm
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.vectorstores import FAISS
-from langchain.prompts.few_shot import FewShotPromptTemplate
-from langchain.prompts.prompt import PromptTemplate
-from langchain_core.example_selectors import SemanticSimilarityExampleSelector
 from langchain.document_loaders import UnstructuredURLLoader
 from langchain.text_splitter import CharacterTextSplitter, RecursiveCharacterTextSplitter
 from htmlTemplates import css, bot_template, user_template
 
-load_dotenv()  # Take environment variables from .env (especially openai API key)
+# Load environment variables
+load_dotenv()
 
-# Define functions for processing PDFs
+# Function to extract text from PDFs
 def get_pdf_text(pdf_docs):
     text = ""
-
     for pdf in pdf_docs:
-        # Check if the file is not a PDF
         if pdf.type != 'application/pdf':
             st.error("Error: The uploaded file is not a PDF.")
             return ""
-
         try:
             pdf_reader = PdfReader(pdf)
             for page in pdf_reader.pages:
@@ -33,11 +28,10 @@ def get_pdf_text(pdf_docs):
         except TypeError as e:
             st.error(f"Error reading PDF file: {e}")
             st.error("Please ensure that the PDF file is not corrupted and try again.")
-            return ""  # Return empty string to indicate failure
-    
+            return ""
     return text
 
-
+# Function to split text into chunks
 def get_text_chunks(text, chunk_size=1000, chunk_overlap=200):
     text_splitter = CharacterTextSplitter(
         separator="\n",
@@ -48,7 +42,7 @@ def get_text_chunks(text, chunk_size=1000, chunk_overlap=200):
     chunks = text_splitter.split_text(text)
     return chunks
 
-# Define functions for processing URLs
+# Function to process URLs and return text chunks
 def process_urls(urls):
     loader = UnstructuredURLLoader(urls=urls)
     data = loader.load()
@@ -56,27 +50,32 @@ def process_urls(urls):
     docs = text_splitter.split_documents(data)
     return docs
 
+# Function to create a vector store from text chunks
 def get_vectorstore_from_chunks(text_chunks):
     embeddings = HuggingFaceEmbeddings(model_name='sentence-transformers/all-MiniLM-L6-v2')
-    # combined_texts = [
-    #     chunk + "\n" + " ".join(str(value) for value in example.values())
-    #     for chunk, example in zip(text_chunks, examples)
-    # ]
     vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
     return vectorstore
 
-
-# Create conversation chain
+# Function to create a conversation chain
 def get_conversation_chain(vectorstore):
     llm = GooglePalm(google_api_key=st.secrets["GOOGLE_API_KEY"], temperature=0.1)
     memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True)
+    prompt_template = """
+    You are an AI assistant. Your responses should be detailed and informative, with a minimum of 300 words.
+    
+    User: {question}
+    
+    Assistant:
+    """
     conversation_chain = ConversationalRetrievalChain.from_llm(
         llm=llm,
         retriever=vectorstore.as_retriever(),
-        memory=memory
+        memory=memory,
+        prompt=prompt_template
     )
     return conversation_chain
 
+# Function to handle user input and generate responses
 def handle_userinput(user_question):
     if st.session_state.conversation is None:
         st.error("Please upload PDFs or provide URLs before asking a question.")
@@ -89,7 +88,6 @@ def handle_userinput(user_question):
             st.write(user_template.replace("{{MSG}}", message.content), unsafe_allow_html=True)
         else:
             st.write(bot_template.replace("{{MSG}}", message.content), unsafe_allow_html=True)
-
 
 # Main function to run the Streamlit app
 def main():
@@ -113,7 +111,6 @@ def main():
         st.subheader("Your documents")
         pdf_docs = st.file_uploader("Upload your PDFs here and click on 'Process'", accept_multiple_files=True)
         
-        # Dynamic URL input fields
         st.subheader("Enter URLs")
         url_inputs = [st.text_input(f"URL {i+1}", key=f"url_{i}") for i in range(st.session_state.url_fields)]
         
