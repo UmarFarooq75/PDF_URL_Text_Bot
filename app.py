@@ -70,17 +70,6 @@ def get_vectorstore_from_chunks(text_chunks):
 def get_conversation_chain(vectorstore):
     llm = GooglePalm(google_api_key=st.secrets["GOOGLE_API_KEY"], temperature=0.1)
     memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True)
-    conversation_chain = ConversationalRetrievalChain.from_llm(
-        llm=llm,
-        retriever=vectorstore.as_retriever(),
-        memory=memory
-    )
-    return conversation_chain
-
-def handle_userinput(user_question):
-    if st.session_state.conversation is None:
-        st.error("Please upload PDFs or provide URLs before asking a question.")
-        return
     prompt_template = """
     You are an AI assistant. Your responses should be detailed and informative, with a minimum of 300 words.
     
@@ -88,7 +77,19 @@ def handle_userinput(user_question):
     
     Assistant:
     """
-    response = st.session_state.conversation({'question': prompt_template})
+    conversation_chain = ConversationalRetrievalChain.from_llm(
+        llm=llm,
+        retriever=vectorstore.as_retriever(),
+        memory=memory,
+        prompt_template=prompt_template
+    )
+    return conversation_chain
+
+def handle_userinput(user_question):
+    if st.session_state.conversation is None:
+        st.error("Please upload PDFs or provide URLs before asking a question.")
+        return
+    response = st.session_state.conversation({'question': user_question})
     st.session_state.chat_history = response['chat_history']
     for i, message in enumerate(st.session_state.chat_history):
         if i % 2 == 0:
